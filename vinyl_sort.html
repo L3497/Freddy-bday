@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Plattenkiste – Sortier-Spiel</title>
+<style>
+  :root{
+    --bg: #1c1713;
+    --bg-2: #241d18;
+    --amber: #d9a34a;
+    --cream: #f3e9d8;
+    --wood: #6b4a30;
+    --wood-light: #87603f;
+    --muted: #a8998a;
+    --rock: #bb4a3c;
+    --jazz: #3f7693;
+    --hiphop: #d98f3c;
+    --elektro: #5a9c76;
+    --danger: #c0453c;
+  }
+
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body{
+    margin:0;
+    height:100%;
+    background: radial-gradient(ellipse at 50% -10%, #332821 0%, var(--bg) 55%, #110d0a 100%);
+    color: var(--cream);
+    font-family: 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  #app{
+    position:relative;
+    width:100%;
+    height:100%;
+    max-width: 720px;
+    margin: 0 auto;
+    display:flex;
+    flex-direction:column;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 14px 18px 10px;
+    font-size: 0.85rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    z-index: 5;
+  }
+  #hud .stat{ text-align:center; }
+  #hud .stat b{
+    display:block;
+    font-size: 1.3rem;
+    color: var(--amber);
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  #hud .lives{ color: var(--danger); letter-spacing: 2px; font-size: 1.1rem; }
+
+  /* ---------- Play area ---------- */
+  #playfield{
+    position: relative;
+    flex: 1;
+    overflow: visible;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+
+  #playfield::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:
+      radial-gradient(circle at 15% 8%, rgba(217,163,74,0.06), transparent 40%),
+      radial-gradient(circle at 85% 4%, rgba(217,163,74,0.05), transparent 35%);
+    pointer-events:none;
+  }
+
+  .record{
+    position:absolute;
+    width: 78px;
+    height: 78px;
+    border-radius:50%;
+    background:
+      repeating-radial-gradient(circle, #111 0px, #111 2px, #000 3px, #000 4px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    animation: spin 2.2s linear infinite;
+    will-change: top, left;
+    z-index: 3;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .record.dragging{
+    animation-play-state: paused;
+    box-shadow: 0 14px 28px rgba(0,0,0,0.55);
+    transform: scale(1.1);
+    cursor: grabbing;
+  }
+  .record .label{
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 1.2rem;
+    box-shadow: inset 0 0 0 2px rgba(0,0,0,0.3);
+  }
+  .record .hole{
+    position:absolute;
+    width:7px; height:7px;
+    border-radius:50%;
+    background: #1c1713;
+    top:50%; left:50%;
+    transform: translate(-50%,-50%);
+  }
+  @keyframes spin{ from{ transform: rotate(0deg);} to{ transform: rotate(360deg);} }
+
+  .floattext{
+    position:absolute;
+    font-weight: 700;
+    font-size: 0.95rem;
+    pointer-events:none;
+    animation: floatUp 0.7s ease-out forwards;
+    z-index: 6;
+  }
+  @keyframes floatUp{
+    from{ opacity:1; transform: translateY(0); }
+    to{ opacity:0; transform: translateY(-34px); }
+  }
+
+  .missflash{
+    position:absolute;
+    inset:0;
+    background: rgba(192,69,60,0.18);
+    pointer-events:none;
+    animation: flash 0.35s ease-out forwards;
+    z-index: 4;
+  }
+  @keyframes flash{ from{opacity:1;} to{opacity:0;} }
+
+  .drop-line{
+    position:absolute;
+    left:0; right:0;
+    bottom: 0;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, rgba(217,163,74,0.35) 0 10px, transparent 10px 20px);
+  }
+
+  /* ---------- Crates ---------- */
+  #crates{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 10px 10px 16px;
+    z-index: 5;
+  }
+
+  .crate{
+    position:relative;
+    border-radius: 8px 8px 4px 4px;
+    padding: 10px 4px 12px;
+    text-align:center;
+    cursor:pointer;
+    border: none;
+    font-family: inherit;
+    background:
+      linear-gradient(180deg, var(--wood-light) 0%, var(--wood) 70%);
+    box-shadow:
+      inset 0 2px 0 rgba(255,255,255,0.12),
+      inset 0 -6px 10px rgba(0,0,0,0.35),
+      0 6px 14px -6px rgba(0,0,0,0.6);
+    color: var(--cream);
+    transition: transform 0.08s ease;
+  }
+  .crate:active{ transform: scale(0.95); }
+  .crate .icon{ font-size: 1.4rem; display:block; margin-bottom: 2px; }
+  .crate .name{ font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.9; }
+  .crate .swatch{
+    position:absolute;
+    top: 6px; right: 6px;
+    width: 9px; height:9px;
+    border-radius:50%;
+  }
+  .crate.pulse{ animation: pulseGood 0.3s ease; }
+  @keyframes pulseGood{
+    0%{ box-shadow: 0 0 0 0 rgba(217,163,74,0.6); }
+    100%{ box-shadow: 0 0 0 14px rgba(217,163,74,0); }
+  }
+  .crate.shake{ animation: shakeBad 0.3s ease; }
+  @keyframes shakeBad{
+    0%,100%{ transform: translateX(0); }
+    25%{ transform: translateX(-4px); }
+    75%{ transform: translateX(4px); }
+  }
+
+  /* ---------- Overlays ---------- */
+  .overlay{
+    position:absolute;
+    inset:0;
+    background: rgba(17,13,10,0.92);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index: 20;
+    padding: 24px;
+    text-align:center;
+  }
+  .overlay.hidden{ display:none; }
+
+  .panel{
+    max-width: 360px;
+  }
+
+  .vinyl-deco{
+    width: 86px; height: 86px;
+    margin: 0 auto 18px;
+    border-radius:50%;
+    background: repeating-radial-gradient(circle, #111 0 2px, #000 3px 4px);
+    display:flex; align-items:center; justify-content:center;
+    animation: spin 4s linear infinite;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.7);
+  }
+  .vinyl-deco .center{
+    width: 30px; height:30px; border-radius:50%;
+    background: var(--amber);
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.1rem;
+  }
+
+  h1{
+    font-size: 1.5rem;
+    margin: 0 0 8px;
+    color: var(--amber);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .panel p{
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    margin: 0 0 20px;
+  }
+  .panel .legend{
+    display:flex;
+    justify-content:center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .legend .tag{
+    display:flex; align-items:center; gap:5px;
+    font-size: 0.72rem;
+    color: var(--cream);
+    background: rgba(255,255,255,0.05);
+    padding: 4px 9px;
+    border-radius: 20px;
+  }
+  .legend .dot{ width:8px; height:8px; border-radius:50%; }
+
+  button.cta{
+    background: var(--amber);
+    color: #241a0e;
+    border:none;
+    padding: 13px 30px;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 30px;
+    cursor:pointer;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+    box-shadow: 0 8px 20px -8px rgba(217,163,74,0.6);
+  }
+  button.cta:hover{ background: #e6b55e; }
+
+  .result-score{
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--amber);
+    margin: 4px 0;
+  }
+  .result-sub{
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  .highscore-badge{
+    display:inline-block;
+    margin-top: 6px;
+    font-size: 0.78rem;
+    color: #241a0e;
+    background: var(--amber);
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="hud">
+    <div class="stat">Punkte<b id="score">0</b></div>
+    <div class="stat">Zeit<b id="time">60</b></div>
+    <div class="stat">Leben<div class="lives" id="lives">♥ ♥ ♥</div></div>
+  </div>
+
+  <div id="playfield">
+    <div class="drop-line"></div>
+  </div>
+
+  <div id="crates"></div>
+
+  <!-- START -->
+  <div class="overlay" id="start-overlay">
+    <div class="panel">
+      <div class="vinyl-deco"><div class="center">♪</div></div>
+      <h1>Plattenkiste</h1>
+      <p>Die Platten fallen von oben. Fasse eine Platte an und ziehe sie in die passende Kiste, bevor sie unten durchfällt. Je länger du durchhältst, desto schneller wird's.</p>
+      <div class="legend" id="legend"></div>
+      <button class="cta" id="start-btn">Spiel starten</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div class="overlay hidden" id="end-overlay">
+    <div class="panel">
+      <h1 id="end-title">Zeit abgelaufen!</h1>
+      <div class="result-score" id="final-score">0</div>
+      <div class="result-sub">Platten sortiert</div>
+      <div id="highscore-line"></div>
+      <div style="height:22px"></div>
+      <button class="cta" id="restart-btn">Nochmal spielen</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const GENRES = [
+    { id:'rock',    label:'Rock',    icon:'🤘', color: 'var(--rock)',    hex:'#bb4a3c' },
+    { id:'jazz',    label:'Jazz',    icon:'🎷', color: 'var(--jazz)',    hex:'#3f7693' },
+    { id:'hiphop',  label:'Hip-Hop', icon:'🎤', color: 'var(--hiphop)',  hex:'#d98f3c' },
+    { id:'elektro', label:'Elektro', icon:'🎛️', color: 'var(--elektro)', hex:'#5a9c76' },
+  ];
+
+  const ROUND_SECONDS = 60;
+  const START_LIVES = 3;
+
+  const playfield = document.getElementById('playfield');
+  const cratesEl = document.getElementById('crates');
+  const scoreEl = document.getElementById('score');
+  const timeEl = document.getElementById('time');
+  const livesEl = document.getElementById('lives');
+  const legendEl = document.getElementById('legend');
+  const startOverlay = document.getElementById('start-overlay');
+  const endOverlay = document.getElementById('end-overlay');
+  const startBtn = document.getElementById('start-btn');
+  const restartBtn = document.getElementById('restart-btn');
+  const endTitle = document.getElementById('end-title');
+  const finalScoreEl = document.getElementById('final-score');
+  const highscoreLine = document.getElementById('highscore-line');
+
+  // Build legend (start screen)
+  GENRES.forEach(g => {
+    const tag = document.createElement('div');
+    tag.className = 'tag';
+    tag.innerHTML = `<span class="dot" style="background:${g.hex}"></span>${g.icon} ${g.label}`;
+    legendEl.appendChild(tag);
+  });
+
+  // Build crates — both a drop target (drag) AND clickable (catches the
+  // most urgent matching record automatically)
+  const crateEls = {};
+  GENRES.forEach(g => {
+    const crate = document.createElement('button');
+    crate.className = 'crate';
+    crate.type = 'button';
+    crate.dataset.genre = g.id;
+    crate.innerHTML = `
+      <span class="swatch" style="background:${g.hex}"></span>
+      <span class="icon">${g.icon}</span>
+      <span class="name">${g.label}</span>
+    `;
+    crate.addEventListener('click', () => catchByClick(g.id, crate));
+    cratesEl.appendChild(crate);
+    crateEls[g.id] = crate;
+  });
+
+  function catchByClick(genreId, crateEl){
+    // find the most urgent (lowest, not currently dragged) record of this genre
+    let best = null;
+    for(const r of records){
+      if(r.genre === genreId && !r.dragging){
+        if(!best || r.y > best.y) best = r;
+      }
+    }
+    if(best){
+      score += 10;
+      scoreEl.textContent = score;
+      floatText('+10', best.x, best.y, '#d9a34a');
+      removeRecord(best);
+      pulseCrate(crateEl);
+    } else {
+      shakeCrate(crateEl);
+    }
+  }
+
+  function pulseCrate(crateEl){
+    crateEl.classList.remove('pulse'); void crateEl.offsetWidth;
+    crateEl.classList.add('pulse');
+    setTimeout(() => crateEl.classList.remove('pulse'), 300);
+  }
+
+  function shakeCrate(crateEl){
+    crateEl.classList.remove('shake'); void crateEl.offsetWidth;
+    crateEl.classList.add('shake');
+    setTimeout(() => crateEl.classList.remove('shake'), 300);
+  }
+
+  let records = [];
+  let score = 0;
+  let lives = START_LIVES;
+  let timeLeft = ROUND_SECONDS;
+  let running = false;
+  let lastSpawn = 0;
+  let spawnInterval = 1300;
+  let lastFrameTime = 0;
+  let elapsed = 0;
+  let rafId = null;
+  let timerId = null;
+  let recordSeq = 0;
+
+  function fieldSize(){
+    return { w: playfield.clientWidth, h: playfield.clientHeight };
+  }
+
+  function spawnRecord(){
+    const { w } = fieldSize();
+    const g = GENRES[Math.floor(Math.random() * GENRES.length)];
+    const size = 78;
+    const x = Math.random() * Math.max(0, w - size - 12) + 6;
+
+    const el = document.createElement('div');
+    el.className = 'record';
+    el.style.left = x + 'px';
+    el.style.top = '-70px';
+    el.innerHTML = `
+      <div class="label" style="background:${g.hex}">${g.icon}</div>
+      <div class="hole"></div>
+    `;
+    playfield.appendChild(el);
+
+    const speedBase = 46; // px/sec
+    const difficultyBoost = Math.min(elapsed / 60, 1) * 55;
+    const speed = speedBase + difficultyBoost + Math.random() * 20;
+
+    const r = {
+      id: ++recordSeq,
+      genre: g.id,
+      x, y: -70,
+      speed,
+      el,
+      dragging: false
+    };
+    records.push(r);
+
+    el.addEventListener('pointerdown', e => onRecordPointerDown(e, r));
+    el.addEventListener('pointermove', e => onRecordPointerMove(e, r));
+    el.addEventListener('pointerup', e => onRecordPointerUp(e, r));
+    el.addEventListener('pointercancel', e => onRecordPointerUp(e, r));
+  }
+
+  function onRecordPointerDown(e, r){
+    e.preventDefault();
+    r.dragging = true;
+    r.el.classList.add('dragging');
+    r.el.style.zIndex = 50;
+    try{ r.el.setPointerCapture(e.pointerId); }catch(err){}
+    r.dragStartClientX = e.clientX;
+    r.dragStartClientY = e.clientY;
+    r.dragStartX = r.x;
+    r.dragStartY = r.y;
+  }
+
+  function onRecordPointerMove(e, r){
+    if(!r.dragging) return;
+    const dx = e.clientX - r.dragStartClientX;
+    const dy = e.clientY - r.dragStartClientY;
+    r.x = r.dragStartX + dx;
+    r.y = r.dragStartY + dy;
+    r.el.style.left = r.x + 'px';
+    r.el.style.top = r.y + 'px';
+  }
+
+  function onRecordPointerUp(e, r){
+    if(!r.dragging) return;
+    r.dragging = false;
+    r.el.classList.remove('dragging');
+    r.el.style.zIndex = 3;
+    try{ r.el.releasePointerCapture(e.pointerId); }catch(err){}
+
+    // figure out which crate (if any) the record was dropped on
+    const recordRect = r.el.getBoundingClientRect();
+    let matchedGenre = null;
+    let bestArea = 0;
+    GENRES.forEach(g => {
+      const crateRect = crateEls[g.id].getBoundingClientRect();
+      const overlapW = Math.max(0, Math.min(recordRect.right, crateRect.right) - Math.max(recordRect.left, crateRect.left));
+      const overlapH = Math.max(0, Math.min(recordRect.bottom, crateRect.bottom) - Math.max(recordRect.top, crateRect.top));
+      const area = overlapW * overlapH;
+      if(area > bestArea){
+        bestArea = area;
+        matchedGenre = g.id;
+      }
+    });
+
+    if(matchedGenre && bestArea > 0){
+      const crateEl = crateEls[matchedGenre];
+      if(matchedGenre === r.genre){
+        score += 10;
+        scoreEl.textContent = score;
+        floatText('+10', r.x, r.y, '#d9a34a');
+        removeRecord(r);
+        pulseCrate(crateEl);
+      } else {
+        shakeCrate(crateEl);
+        // wrong crate: record stays where dropped and keeps falling from there
+      }
+    }
+    // dropped on empty space: just resumes falling from current position
+  }
+
+  function floatText(text, x, y, color){
+    const t = document.createElement('div');
+    t.className = 'floattext';
+    t.textContent = text;
+    t.style.left = (x + 10) + 'px';
+    t.style.top = Math.max(0, y) + 'px';
+    t.style.color = color;
+    playfield.appendChild(t);
+    setTimeout(() => t.remove(), 700);
+  }
+
+  function removeRecord(r){
+    r.el.remove();
+    records = records.filter(x => x.id !== r.id);
+  }
+
+  function missRecord(r){
+    removeRecord(r);
+    lives -= 1;
+    renderLives();
+    const flash = document.createElement('div');
+    flash.className = 'missflash';
+    playfield.appendChild(flash);
+    setTimeout(() => flash.remove(), 350);
+    if(lives <= 0){
+      endGame(false);
+    }
+  }
+
+  function renderLives(){
+    livesEl.textContent = '♥ '.repeat(Math.max(lives,0)).trim() || '—';
+  }
+
+  function tick(now){
+    if(!running) return;
+    if(!lastFrameTime) lastFrameTime = now;
+    const dt = (now - lastFrameTime) / 1000;
+    lastFrameTime = now;
+    elapsed += dt;
+
+    const { h } = fieldSize();
+
+    // spawn
+    lastSpawn += dt * 1000;
+    const currentInterval = Math.max(480, spawnInterval - elapsed * 10);
+    if(lastSpawn > currentInterval){
+      lastSpawn = 0;
+      spawnRecord();
+    }
+
+    // move (skip records currently being dragged by the player)
+    const toMiss = [];
+    for(const r of records){
+      if(r.dragging) continue;
+      r.y += r.speed * dt;
+      r.el.style.top = r.y + 'px';
+      if(r.y > h - 10){
+        toMiss.push(r);
+      }
+    }
+    toMiss.forEach(missRecord);
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function startTimer(){
+    timerId = setInterval(() => {
+      timeLeft -= 1;
+      timeEl.textContent = timeLeft;
+      if(timeLeft <= 0){
+        endGame(true);
+      }
+    }, 1000);
+  }
+
+  function resetState(){
+    records.forEach(r => r.el.remove());
+    records = [];
+    score = 0;
+    lives = START_LIVES;
+    timeLeft = ROUND_SECONDS;
+    elapsed = 0;
+    lastSpawn = 9999; // spawn almost immediately
+    lastFrameTime = 0;
+    scoreEl.textContent = '0';
+    timeEl.textContent = ROUND_SECONDS;
+    renderLives();
+    document.querySelectorAll('.floattext, .missflash').forEach(el => el.remove());
+  }
+
+  function startGame(){
+    resetState();
+    startOverlay.classList.add('hidden');
+    endOverlay.classList.add('hidden');
+    running = true;
+    startTimer();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function endGame(timeUp){
+    running = false;
+    clearInterval(timerId);
+    cancelAnimationFrame(rafId);
+
+    const highKey = 'vinylSortHighscore';
+    const prevHigh = parseInt(localStorage.getItem(highKey) || '0', 10);
+    const isNewHigh = score > prevHigh;
+    if(isNewHigh) localStorage.setItem(highKey, String(score));
+    const high = isNewHigh ? score : prevHigh;
+
+    endTitle.textContent = timeUp ? 'Zeit abgelaufen!' : 'Plattenstapel gekippt!';
+    finalScoreEl.textContent = score;
+    highscoreLine.innerHTML = isNewHigh
+      ? `<span class="highscore-badge">Neuer Highscore! 🎉</span>`
+      : `<div class="result-sub">Highscore: ${high}</div>`;
+
+    endOverlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+
+  renderLives();
+})();
+</script>
+</body>
+</html>
